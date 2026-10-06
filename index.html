@@ -323,7 +323,7 @@ document.getElementById('docTitle').textContent='การพัฒนาระ�
 /* ---------- Google Sheet review log ---------- */
 const SHEETS_WEBAPP_URL = ''; /* ว่างไว้จนกว่าหัวหน้าจะ Deploy Apps Script แล้วส่ง /exec URL มา */
 const SHEETS_TOKEN = 'richmax-td-2026';
-const APP_VERSION = 'sheets-v1 (2026-10-06)';
+const APP_VERSION = 'sheets-v2-restore (2026-10-06)';
 const REVIEWERS = ['ดร.วิชิต', 'พี่บิ๊ก'];
 let reviewer = 'พี่บิ๊ก';
 try {
@@ -348,6 +348,25 @@ function itemTitleOf(id) {
   const it = BYID[id];
   if (!it) return id || '';
   return (it.q || it.title || id || '').slice(0, 300);
+}
+/* สถานะสำหรับ Restore — เก็บในชีต + ฝังในลิงก์ #restore= (Pages อ่านชีตส่วนตัวไม่ได้) */
+function buildStatePayload(itemId, statusCode, marks, noteText) {
+  const at = Date.now();
+  const full = {
+    itemId: itemId || '',
+    status: statusCode == null ? null : statusCode,
+    marks: marks && typeof marks === 'object' ? marks : {},
+    noteText: noteText || '',
+    reviewer,
+    at
+  };
+  let stateJson = JSON.stringify(full);
+  if (stateJson.length > 4000) {
+    full.noteText = String(full.noteText || '').slice(0, 800);
+    full.truncated = true;
+    stateJson = JSON.stringify(full).slice(0, 4000);
+  }
+  return { stateJson, at };
 }
 function logToSheet(payload) {
   /* ชีตเก็บบทสนทนาตรวจระหว่าง ดร.วิชิต กับ พี่บิ๊ก เท่านั้น — โหมดนักศึกษาไม่ส่ง */
@@ -416,25 +435,36 @@ function rev(id){return S.reviews[id]||{status:null,marks:{}}}
 async function saveReview(id,patch){
   const r=Object.assign({status:null,marks:{}},rev(id),patch,{at:Date.now(),by:actorName()});
   S.reviews[id]=r; lsSave(); renderAll();
+  const st = buildStatePayload(id, r.status, r.marks, '');
+  r.at = st.at;
   logToSheet({
     eventType: 'review',
     itemId: id,
     itemTitle: itemTitleOf(id),
     status: statusLabel(r.status),
     marksSummary: marksSummary(r.marks),
-    noteText: ''
+    noteText: '',
+    marksJson: JSON.stringify(r.marks || {}),
+    stateJson: st.stateJson,
+    at: st.at
   });
   if(db){try{await db.doc('reviews/'+id).set(r)}catch(e){toast('บันทึกไม่สำเร็จ: '+(e.message||e.code))}}
 }
 async function addNote(n){
   n=Object.assign({at:Date.now(),by:actorName(),done:false},n);
+  const curR = rev(n.item || '');
+  const st = buildStatePayload(n.item || '', curR.status, curR.marks, n.text || '');
+  n.at = st.at;
   logToSheet({
     eventType: 'note',
     itemId: n.item || '',
     itemTitle: itemTitleOf(n.item),
-    status: '',
-    marksSummary: n.para != null && n.para !== '' ? ('ย่อหน้า ' + (+n.para + 1)) : '',
-    noteText: n.text || ''
+    status: statusLabel(curR.status),
+    marksSummary: n.para != null && n.para !== '' ? ('ย่อหน้า ' + (+n.para + 1)) : marksSummary(curR.marks),
+    noteText: n.text || '',
+    marksJson: JSON.stringify(curR.marks || {}),
+    stateJson: st.stateJson,
+    at: st.at
   });
   if(db){try{await db.collection('notes').add(n);toast('บันทึกข้อเสนอแนะแล้ว');return}catch(e){toast('บันทึกไม่สำเร็จ: '+(e.message||e.code));return}}
   n._id='l'+Date.now();S.notes.push(n);lsSave();renderAll();toast('บันทึกข้อเสนอแนะแล้ว');
@@ -455,6 +485,60 @@ async function delEvent(id){S.events=S.events.filter(x=>x._id!==id);lsSave();ren
 
 function setSync(on,txt){const el=$('#sync');el.classList.toggle('on',on);el.querySelector('span').textContent=txt}
 lsLoad(); setSync(false,'บันทึกเฉพาะเครื่องนี้');
+
+/* โหลดเวอร์ชันเก่าจากลิงก์ในชีต (#restore=... หรือ ?restore=...) — สร้างสถานะใหม่ในเครื่อง ไม่ลบแถวชีต */
+function statusFromRestore(v){
+  if(v==='ok'||v==='fix') return v;
+  if(v==='ผ่าน') return 'ok';
+  if(v==='ต้องแก้ไข') return 'fix';
+  if(v==null||v===''||v==='ล้าง') return null;
+  return v;
+}
+function applyRestoreFromUrl(){
+  let raw=null;
+  const h=location.hash||'';
+  if(h.indexOf('#restore=')===0) raw=h.slice('#restore='.length);
+  else{
+    try{
+      const p=new URLSearchParams(location.search||'');
+      raw=p.get('restore');
+    }catch(e){}
+  }
+  if(!raw) return false;
+  let st;
+  try{ st=JSON.parse(decodeURIComponent(raw)); }catch(e){
+    try{ st=JSON.parse(raw); }catch(e2){ toast('โหลดเวอร์ชันไม่สำเร็จ'); return false; }
+  }
+  if(!st||typeof st!=='object'){ toast('โหลดเวอร์ชันไม่สำเร็จ'); return false; }
+  const id=st.id||st.itemId;
+  if(!id){ toast('โหลดเวอร์ชันไม่สำเร็จ'); return false; }
+  const status=statusFromRestore(st.st!==undefined?st.st:st.status);
+  const marks=(st.mk&&typeof st.mk==='object')?st.mk:((st.marks&&typeof st.marks==='object')?st.marks:{});
+  const noteText=st.nt||st.noteText||'';
+  const rv=st.rv||st.reviewer||'';
+  S.reviews[id]=Object.assign({status:null,marks:{}},rev(id),{
+    status, marks, at:Date.now(), by:rv||actorName()
+  });
+  if(noteText){
+    try{ sessionStorage.setItem('draft.'+id, String(noteText)); }catch(e){}
+  }
+  if(rv&&REVIEWERS.includes(rv)){
+    reviewer=rv;
+    try{localStorage.setItem('thesisdesk.reviewer',rv)}catch(e){}
+    syncReviewerUI();
+  }
+  lsSave();
+  try{
+    const clean=location.pathname+(location.search&&!/[?&]restore=/.test(location.search)?location.search:'');
+    history.replaceState(null,'',clean||location.pathname);
+  }catch(e){ try{location.hash='';}catch(e2){} }
+  if(typeof BYID!=='undefined'&&BYID[id]&&typeof go==='function'){
+    try{ go(id); }catch(e){}
+  }
+  toast('โหลดเวอร์ชันเก่าแล้ว');
+  return true;
+}
+
 (async()=>{
   try{
     if(!window.claude||!claude.use)return;
@@ -695,6 +779,7 @@ function renderSum(){
   $('#sumView').querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 }
 
+applyRestoreFromUrl();
 renderAll();
 })();
 </script>
