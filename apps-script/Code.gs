@@ -3,7 +3,7 @@
  * Bound to the Google Sheet "RICHMAX Thesis Desk - Review Log".
  * Self-contained: paste this whole file into Extensions > Apps Script of that sheet.
  *
- * doPost : appends one row per review/note event (LockService + shared token, formula-escaped text).
+ * doPost : appends one row per review/note turn from ดร.วิชิต or พี่บิ๊ก (LockService + shared token, formula-escaped text).
  * doGet  : health check (open the Web App URL in a browser -> {"ok":true,...}).
  *
  * NOTE: SHARED_TOKEN is also in the PUBLIC web page, so it is a demo-level filter

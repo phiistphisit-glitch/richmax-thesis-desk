@@ -350,9 +350,16 @@ function itemTitleOf(id) {
   return (it.q || it.title || id || '').slice(0, 300);
 }
 function logToSheet(payload) {
+  /* ชีตเก็บบทสนทนาตรวจระหว่าง ดร.วิชิต กับ พี่บิ๊ก เท่านั้น — โหมดนักศึกษาไม่ส่ง */
+  if (role !== 'อาจารย์') return;
   const url = (SHEETS_WEBAPP_URL || '').trim();
   if (!url) return;
-  const body = JSON.stringify(Object.assign({ token: SHEETS_TOKEN, appVersion: APP_VERSION }, payload));
+  const body = JSON.stringify(Object.assign({
+    token: SHEETS_TOKEN,
+    appVersion: APP_VERSION,
+    reviewer,
+    role: 'อาจารย์'
+  }, payload));
   try {
     fetch(url, {
       method: 'POST',
@@ -411,8 +418,6 @@ async function saveReview(id,patch){
   S.reviews[id]=r; lsSave(); renderAll();
   logToSheet({
     eventType: 'review',
-    reviewer: role==='อาจารย์' ? reviewer : '',
-    role,
     itemId: id,
     itemTitle: itemTitleOf(id),
     status: statusLabel(r.status),
@@ -425,8 +430,6 @@ async function addNote(n){
   n=Object.assign({at:Date.now(),by:actorName(),done:false},n);
   logToSheet({
     eventType: 'note',
-    reviewer: role==='อาจารย์' ? reviewer : '',
-    role,
     itemId: n.item || '',
     itemTitle: itemTitleOf(n.item),
     status: '',
