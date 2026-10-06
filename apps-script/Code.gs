@@ -50,12 +50,12 @@ function doPost(e) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return json_({ ok: false, error: 'busy' });
 
-  var sheet, ts, rowNumber;
+  var sheet, ts, rowNumber, ver;
   try {
     sheet = getSheet_();
     if (sheet.getLastRow() === 0) sheet.appendRow(HEADERS);   // creates the header row on an empty sheet
     ts = nowText_();
-    var ver = nextVersion_(sheet);   // เลขเวอร์ชันรันต่อเนื่อง ไม่ทับของเก่า
+    ver = nextVersion_(sheet);   // เลขเวอร์ชันรันต่อเนื่อง ไม่ทับของเก่า
     sheet.appendRow(buildRow_(data, ts, ver));
     rowNumber = sheet.getLastRow();
   } finally {
