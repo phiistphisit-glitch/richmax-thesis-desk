@@ -38,6 +38,12 @@ button{cursor:pointer}
 .role{display:flex;background:rgba(255,255,255,.12);border-radius:8px;padding:3px}
 .role button{border:0;background:transparent;color:#d7e0f1;padding:5px 12px;border-radius:6px;font-size:13px}
 .role button[aria-pressed=true]{background:#fff;color:var(--navy);font-weight:600}
+.reviewer{display:none;align-items:center;gap:8px;font-size:12.5px;color:#d7e0f1}
+.reviewer.show{display:flex}
+.reviewer .rlbl{white-space:nowrap;color:#aebcd8}
+.reviewer .rpick{display:flex;background:rgba(255,255,255,.12);border-radius:8px;padding:3px;gap:2px}
+.reviewer .rpick button{border:0;background:transparent;color:#d7e0f1;padding:5px 10px;border-radius:6px;font-size:12.5px;white-space:nowrap}
+.reviewer .rpick button[aria-pressed=true]{background:#f0b44c;color:var(--navy);font-weight:600}
 .sync{font-size:12px;color:#aebcd8;display:flex;align-items:center;gap:6px}
 .sync i{width:8px;height:8px;border-radius:50%;background:#f0b44c;display:inline-block}
 .sync.on i{background:#4cd18a}
@@ -269,6 +275,13 @@ textarea{width:100%;min-height:76px;border:1px solid var(--line-2);border-radius
   <div class="role" role="group" aria-label="ผู้ใช้งาน">
     <button id="roleA" aria-pressed="true">อาจารย์</button><button id="roleS" aria-pressed="false">นักศึกษา</button>
   </div>
+  <div class="reviewer" id="reviewerBox" aria-label="ผู้ตรวจ">
+    <span class="rlbl">ผู้ตรวจ</span>
+    <div class="rpick" role="group">
+      <button type="button" id="revVichit" aria-pressed="false">ดร.วิชิต</button>
+      <button type="button" id="revBig" aria-pressed="true">พี่บิ๊ก</button>
+    </div>
+  </div>
   <div class="sync" id="sync"><i></i><span>กำลังเชื่อมต่อ…</span></div>
 </header>
 <nav class="tabs" role="tablist">
@@ -307,6 +320,50 @@ STEPS.forEach(s=>BYID[s.id]=s);
 const STEPOF={}; STEPS.forEach(s=>s.links.forEach(l=>(STEPOF[l]=STEPOF[l]||[]).push(s.n)));
 document.getElementById('docTitle').textContent='การพัฒนาระบบเอไอเอเจนต์อีอาร์พีเพื่อเพิ่มประสิทธิภาพการเสนอราคาและการวางแผนผลิตในอุตสาหกรรมพิมพ์บรรจุภัณฑ์';
 
+/* ---------- Google Sheet review log ---------- */
+const SHEETS_WEBAPP_URL = ''; /* ว่างไว้จนกว่าหัวหน้าจะ Deploy Apps Script แล้วส่ง /exec URL มา */
+const SHEETS_TOKEN = 'richmax-td-2026';
+const APP_VERSION = 'sheets-v1 (2026-10-06)';
+const REVIEWERS = ['ดร.วิชิต', 'พี่บิ๊ก'];
+let reviewer = 'พี่บิ๊ก';
+try {
+  const rv = localStorage.getItem('thesisdesk.reviewer');
+  if (REVIEWERS.includes(rv)) reviewer = rv;
+} catch (e) {}
+function actorName() { return role === 'อาจารย์' ? reviewer : 'นักศึกษา'; }
+function statusLabel(st) {
+  if (st === 'ok') return 'ผ่าน';
+  if (st === 'fix') return 'ต้องแก้ไข';
+  if (st == null || st === '') return 'ล้าง';
+  return String(st);
+}
+function marksSummary(marks) {
+  const m = marks || {};
+  let ok = 0, fix = 0;
+  Object.keys(m).forEach(k => { if (m[k] === 'ok') ok++; else if (m[k] === 'fix') fix++; });
+  if (!ok && !fix) return '';
+  return 'ผ่าน ' + ok + ' · ต้องแก้ ' + fix;
+}
+function itemTitleOf(id) {
+  const it = BYID[id];
+  if (!it) return id || '';
+  return (it.q || it.title || id || '').slice(0, 300);
+}
+function logToSheet(payload) {
+  const url = (SHEETS_WEBAPP_URL || '').trim();
+  if (!url) return;
+  const body = JSON.stringify(Object.assign({ token: SHEETS_TOKEN, appVersion: APP_VERSION }, payload));
+  try {
+    fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      keepalive: true,
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const TH_M=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -327,18 +384,55 @@ function lsLoad(){try{const v=JSON.parse(localStorage.getItem(LS)||'null');if(v)
 function lsSave(){if(online)return;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 let role='อาจารย์';
 try{role=localStorage.getItem('thesisdesk.role')||'อาจารย์'}catch(e){}
+function syncReviewerUI(){
+  const box=$('#reviewerBox');
+  if(box) box.classList.toggle('show', role==='อาจารย์');
+  const a=$('#revVichit'), b=$('#revBig');
+  if(a) a.setAttribute('aria-pressed', reviewer==='ดร.วิชิต' ? 'true' : 'false');
+  if(b) b.setAttribute('aria-pressed', reviewer==='พี่บิ๊ก' ? 'true' : 'false');
+}
+function setReviewer(name){
+  if(!REVIEWERS.includes(name)) return;
+  reviewer=name;
+  try{localStorage.setItem('thesisdesk.reviewer', name)}catch(e){}
+  syncReviewerUI();
+}
 function setRole(r){role=r;try{localStorage.setItem('thesisdesk.role',r)}catch(e){}
-  $('#roleA').setAttribute('aria-pressed',r==='อาจารย์');$('#roleS').setAttribute('aria-pressed',r==='นักศึกษา');renderAll();}
+  $('#roleA').setAttribute('aria-pressed',r==='อาจารย์');$('#roleS').setAttribute('aria-pressed',r==='นักศึกษา');
+  syncReviewerUI(); renderAll();}
 $('#roleA').onclick=()=>setRole('อาจารย์');$('#roleS').onclick=()=>setRole('นักศึกษา');
+$('#revVichit').onclick=()=>setReviewer('ดร.วิชิต');
+$('#revBig').onclick=()=>setReviewer('พี่บิ๊ก');
+syncReviewerUI();
 
 function rev(id){return S.reviews[id]||{status:null,marks:{}}}
 async function saveReview(id,patch){
-  const r=Object.assign({status:null,marks:{}},rev(id),patch,{at:Date.now(),by:role});
+  const r=Object.assign({status:null,marks:{}},rev(id),patch,{at:Date.now(),by:actorName()});
   S.reviews[id]=r; lsSave(); renderAll();
+  logToSheet({
+    eventType: 'review',
+    reviewer: role==='อาจารย์' ? reviewer : '',
+    role,
+    itemId: id,
+    itemTitle: itemTitleOf(id),
+    status: statusLabel(r.status),
+    marksSummary: marksSummary(r.marks),
+    noteText: ''
+  });
   if(db){try{await db.doc('reviews/'+id).set(r)}catch(e){toast('บันทึกไม่สำเร็จ: '+(e.message||e.code))}}
 }
 async function addNote(n){
-  n=Object.assign({at:Date.now(),by:role,done:false},n);
+  n=Object.assign({at:Date.now(),by:actorName(),done:false},n);
+  logToSheet({
+    eventType: 'note',
+    reviewer: role==='อาจารย์' ? reviewer : '',
+    role,
+    itemId: n.item || '',
+    itemTitle: itemTitleOf(n.item),
+    status: '',
+    marksSummary: n.para != null && n.para !== '' ? ('ย่อหน้า ' + (+n.para + 1)) : '',
+    noteText: n.text || ''
+  });
   if(db){try{await db.collection('notes').add(n);toast('บันทึกข้อเสนอแนะแล้ว');return}catch(e){toast('บันทึกไม่สำเร็จ: '+(e.message||e.code));return}}
   n._id='l'+Date.now();S.notes.push(n);lsSave();renderAll();toast('บันทึกข้อเสนอแนะแล้ว');
 }
@@ -455,7 +549,7 @@ function notesHTML(id){
    <div class="body">${esc(n.text)}</div>
    <div class="acts"><span class="pill ${n.done?'done':'wait'}">${n.done?'แก้แล้ว':'รอแก้ไข'}</span>
    <button class="lnk" data-done="${n._id}">${n.done?'เปิดกลับเป็นรอแก้ไข':'ทำเครื่องหมายว่าแก้แล้ว'}</button>
-   ${n.by===role?`<button class="lnk dim" data-del="${n._id}">ลบ</button>`:''}</div></div></div>`).join('')+`</div>`;
+   ${n.by===actorName()?`<button class="lnk dim" data-del="${n._id}">ลบ</button>`:''}</div></div></div>`).join('')+`</div>`;
 }
 function parasHTML(it){
   const r=rev(it.id), marks=r.marks||{};

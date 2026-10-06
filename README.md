@@ -5,3 +5,27 @@
 Live: https://phiistphisit-glitch.github.io/richmax-thesis-desk/
 
 Author: นายพิสิษฐ์ มหาดำรงไพศาล · SSRU Development Administration
+
+## Google Sheet — บันทึกการตรวจทุกครั้ง
+
+ชีต: [RICHMAX Thesis Desk - Review Log](https://docs.google.com/spreadsheets/d/1W_qCzD0Pw_3FgXxRy55KQDTAq7XcmBRf3N7GqqWRqzo/edit)
+
+Token ในเว็บ: `richmax-td-2026` (ต้องตรงกับ `SHARED_TOKEN` ใน Apps Script)
+
+ผู้ตรวจ 2 คน (เลือกตอนโหมดอาจารย์): **ดร.วิชิต** (= ผศ. ดร.วิชิต สุรดินทร์กูร อาจารย์ที่ปรึกษา) · **พี่บิ๊ก**  
+โหมดนักศึกษา = นายพิสิษฐ์ มหาดำรงไพศาล (ไม่ต้องเลือกชื่อแยก)
+
+### วิธี Deploy (หัวหน้าทำครั้งเดียว)
+
+1. เปิดชีตด้านบน → เมนู **Extensions** → **Apps Script**
+2. ลบโค้ดเดิมใน `Code.gs` (ถ้ามี) แล้ววางทั้งไฟล์จาก repo: `apps-script/Code.gs`
+3. กด **Deploy** → **New deployment**
+4. ชนิด: **Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+5. Deploy แล้ว **คัดลอก URL ที่ลงท้าย `/exec`**
+6. บอก Tony ว่า deployment URL คืออะไร (หรือส่ง Deployment ID) — จะใส่ใน `SHEETS_WEBAPP_URL` ใน `index.html` แล้ว push ขึ้น Pages
+
+หลังใส่ URL แล้ว ทุกครั้งที่กดผลการตรวจ (ผ่าน / ต้องแก้ไข / ล้าง) หรือบันทึกข้อเสนอแนะ จะมีแถวใหม่ในชีตโดยอัตโนมัติ
+
+ตรวจสุขภาพ: เปิด URL `/exec` ในเบราว์เซอร์ ควรได้ `{"ok":true,"service":"RICHMAX Thesis Desk - Review Log",...}`
