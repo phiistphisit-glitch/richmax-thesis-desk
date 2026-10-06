@@ -30,7 +30,8 @@ var FIELDS = [
   ['noteText', 'Note text', 't', 2000],
   ['appVersion', 'App version', 't', 40]
 ];
-var HEADERS = ['Timestamp (Asia/Bangkok)'].concat(FIELDS.map(function (f) { return f[1]; }));
+// Append-only: ทุกครั้งเพิ่มแถวใหม่ ไม่ลบ/ไม่เขียนทับของเก่า — แถวเก่าคือเวอร์ชันเก่า เปิดดูได้ตาม Timestamp / Version
+var HEADERS = ['Timestamp (Asia/Bangkok)', 'Version'].concat(FIELDS.map(function (f) { return f[1]; }));
 
 // ===== Web app entry points =====
 function doGet(e) {
@@ -54,13 +55,14 @@ function doPost(e) {
     sheet = getSheet_();
     if (sheet.getLastRow() === 0) sheet.appendRow(HEADERS);   // creates the header row on an empty sheet
     ts = nowText_();
-    sheet.appendRow(buildRow_(data, ts));
+    var ver = nextVersion_(sheet);   // เลขเวอร์ชันรันต่อเนื่อง ไม่ทับของเก่า
+    sheet.appendRow(buildRow_(data, ts, ver));
     rowNumber = sheet.getLastRow();
   } finally {
     lock.releaseLock();
   }
 
-  return json_({ ok: true, row: rowNumber });
+  return json_({ ok: true, row: rowNumber, version: ver });
 }
 
 // ===== Helpers =====
@@ -85,8 +87,13 @@ function num_(v) {
   return isFinite(n) ? n : '';
 }
 
-function buildRow_(d, ts) {
-  var row = [ts];
+function nextVersion_(sheet) {
+  // Version = จำนวนแถวข้อมูล (ไม่นับหัวตาราง) + 1 — ไม่ลบแถวเก่า จึงเรียง 1,2,3... ตลอด
+  var last = sheet.getLastRow();
+  return last <= 1 ? 1 : last; // after header at row 1, lastRow before append is previous version count+header
+}
+function buildRow_(d, ts, ver) {
+  var row = [ts, ver];
   for (var i = 0; i < FIELDS.length; i++) {
     var f = FIELDS[i];
     row.push(f[2] === 'n' ? num_(d[f[0]]) : txt_(d[f[0]], f[3]));
