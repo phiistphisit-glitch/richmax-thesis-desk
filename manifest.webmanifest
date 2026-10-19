@@ -1,0 +1,19 @@
+{
+ "name": "โต๊ะตรวจสารนิพนธ์",
+ "short_name": "โต๊ะตรวจสารนิพนธ์",
+ "description": "ตรวจทีละคำถาม เห็นที่มาของคำตอบ — สารนิพนธ์ AI Agent ERP",
+ "start_url": "./index.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#ffffff",
+ "theme_color": "#1f4e79",
+ "lang": "th",
+ "icons": [
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  }
+ ]
+}
