@@ -41,6 +41,9 @@ button{cursor:pointer}
 .sync{font-size:12px;color:#aebcd8;display:flex;align-items:center;gap:6px}
 .sync i{width:8px;height:8px;border-radius:50%;background:#f0b44c;display:inline-block}
 .sync.on i{background:#4cd18a}
+.exportbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.exportbar button{border:0;background:#fff;color:var(--navy);padding:6px 10px;border-radius:6px;font-size:13px;font-weight:600;white-space:nowrap}
+.exportbar button:hover{background:#dbe7f5}
 
 .tabs{display:flex;gap:4px;padding:0 20px;background:var(--paper);border-bottom:1px solid var(--line);overflow-x:auto}
 .tabs button{border:0;background:none;padding:13px 14px 11px;font-size:15px;color:var(--ink-2);border-bottom:3px solid transparent;white-space:nowrap}
@@ -269,6 +272,7 @@ textarea{width:100%;min-height:76px;border:1px solid var(--line-2);border-radius
   <div class="role" role="group" aria-label="ผู้ใช้งาน">
     <button id="roleA" aria-pressed="true">อาจารย์</button><button id="roleS" aria-pressed="false">นักศึกษา</button>
   </div>
+  <div class="exportbar" role="group" aria-label="ส่งออกและนำเข้าผลตรวจ"><button id="btnExportJson" type="button">⬇ ส่งออกผลตรวจ (JSON)</button><button id="btnExportHtml" type="button">📄 รายงานผลตรวจ (HTML)</button><button id="btnImport" type="button">⬆ นำเข้าผลตรวจ</button><input type="file" id="importFile" accept=".json,application/json" hidden></div>
   <div class="sync" id="sync"><i></i><span>กำลังเชื่อมต่อ…</span></div>
 </header>
 <nav class="tabs" role="tablist">
@@ -325,6 +329,79 @@ let db=null, online=false;
 const LS='thesisdesk.v1';
 function lsLoad(){try{const v=JSON.parse(localStorage.getItem(LS)||'null');if(v){S.reviews=v.reviews||{};S.notes=v.notes||[];S.events=v.events||[];}}catch(e){}}
 function lsSave(){if(online)return;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+/* ---------- export / import review results (additive) ---------- */
+function tdStamp(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())}
+function tdDownload(name,content,type){const blob=content instanceof Blob?content:new Blob([content],{type:type||'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+function tdStatusLabel(s){return s==='ok'?'ผ่าน':s==='fix'?'ต้องแก้ไข':s==='part'?'ตรวจบางส่วน (มีเครื่องหมายรายย่อหน้า)':'ยังไม่ตรวจ'}
+function tdSummary(){const counts={ok:0,fix:0,part:0,unreviewed:0};let reviewed=0;ITEMS.forEach(it=>{const s=status(it.id);if(s){reviewed++;counts[s]=(counts[s]||0)+1}else counts.unreviewed++});return{totalItems:ITEMS.length,reviewed:reviewed,counts:counts,notesTotal:S.notes.length,notesPending:S.notes.filter(n=>!n.done).length}}
+function exportReviewJSON(){const payload={tool:'thesisdesk',formatVersion:1,exportedAt:new Date().toISOString(),role:role,reviews:S.reviews,notes:S.notes,events:S.events,summary:tdSummary()};tdDownload('thesisdesk-review-'+tdStamp()+'.json',JSON.stringify(payload,null,2),'application/json;charset=utf-8');toast('ส่งออกผลตรวจ (JSON) แล้ว')}
+function exportReviewHTML(){
+  const sum=tdSummary();
+  const reviewedItems=ITEMS.filter(it=>status(it.id)||S.notes.some(n=>n.item===it.id));
+  const pendingItems=ITEMS.filter(it=>!(status(it.id)||S.notes.some(n=>n.item===it.id)));
+  let h='';
+  h+='<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>รายงานผลตรวจสารนิพนธ์</title><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:900px;margin:24px auto;padding:0 18px 48px;color:#1a2332;line-height:1.65}h1{font-size:24px;margin-bottom:4px}h2{font-size:18px;margin:0 0 6px}section{border:1px solid #d7dee9;border-radius:10px;padding:16px 18px;margin:14px 0;background:#fff}.meta{color:#5a6a82;font-size:14px}.status{font-weight:700}.ok{color:#177245}.fix{color:#b45f06}.part{color:#7a5a00}table{border-collapse:collapse;margin:12px 0}th,td{border:1px solid #d7dee9;padding:6px 12px;text-align:left}ul{margin:6px 0 6px 20px;padding:0}blockquote{margin:6px 0;padding:8px 12px;background:#f4f6fa;border-left:3px solid #c6d2e3;color:#334}.note{margin:8px 0}.done{color:#177245}.wait{color:#b45f06}</style></head><body>';
+  h+='<h1>รายงานผลตรวจสารนิพนธ์</h1>';
+  h+='<p class="meta">ส่งออกเมื่อ '+esc(fmtTime(Date.now()))+' &middot; ผู้ตรวจ: '+esc(role)+' &middot; ที่มา: โต๊ะตรวจสารนิพนธ์</p>';
+  h+='<h2>สรุปภาพรวม</h2><table><tr><th>รายการ</th><th>จำนวน</th></tr>'
+    +'<tr><td>หัวข้อทั้งหมด</td><td>'+sum.totalItems+'</td></tr>'
+    +'<tr><td>ตรวจแล้ว (มีผลหรือเครื่องหมาย)</td><td>'+sum.reviewed+'</td></tr>'
+    +'<tr><td>ผ่าน (ok)</td><td>'+sum.counts.ok+'</td></tr>'
+    +'<tr><td>ต้องแก้ไข (fix)</td><td>'+sum.counts.fix+'</td></tr>'
+    +'<tr><td>ตรวจบางส่วน (part)</td><td>'+sum.counts.part+'</td></tr>'
+    +'<tr><td>ยังไม่ตรวจ</td><td>'+sum.counts.unreviewed+'</td></tr>'
+    +'<tr><td>ข้อเสนอแนะทั้งหมด / ค้างรอแก้ไข</td><td>'+sum.notesTotal+' / '+sum.notesPending+'</td></tr></table>';
+  h+='<h2>หัวข้อที่ตรวจแล้ว ('+reviewedItems.length+')</h2>';
+  if(!reviewedItems.length)h+='<p>ยังไม่มีหัวข้อที่ตรวจ</p>';
+  reviewedItems.forEach(it=>{
+    const r=rev(it.id),s=status(it.id);
+    h+='<section><h2>'+esc(it.title)+'</h2>';
+    h+='<p class="meta">กลุ่ม: '+esc(it.group||'-')+' &middot; สถานะ: <span class="status '+(s||'')+'">'+esc(tdStatusLabel(s))+'</span>'
+      +(r.by?' &middot; ตรวจโดย '+esc(r.by):'')+(r.at?' &middot; '+esc(fmtTime(r.at)):'')+'</p>';
+    if(it.q)h+='<p class="meta">คำถามตรวจ: '+esc(it.q)+'</p>';
+    const marks=r.marks||{},keys=Object.keys(marks).sort((a,b)=>(+a)-(+b));
+    h+='<h3>เครื่องหมายรายย่อหน้า</h3>';
+    if(!keys.length)h+='<p>ไม่มีเครื่องหมายรายย่อหน้า</p>';
+    else{h+='<ul>';keys.forEach(k=>{const para=(it.paras||[])[+k];const txt=para?String(para.t||''):'';h+='<li>ย่อหน้าที่ '+(+k+1)+' — '+(marks[k]==='ok'?'ผ่าน':'ต้องแก้')+(txt?'<blockquote>'+esc(txt.length>300?txt.slice(0,300)+'…':txt)+'</blockquote>':'')+'</li>'});h+='</ul>';}
+    const ns=S.notes.filter(n=>n.item===it.id).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+    h+='<h3>ข้อเสนอแนะที่เกี่ยวข้อง ('+ns.length+')</h3>';
+    if(!ns.length)h+='<p>ไม่มีข้อเสนอแนะ</p>';
+    else{h+='<ul>';ns.forEach(n=>{h+='<li class="note">'+esc(n.text||'')+'<br><span class="meta">'+(n.para!=null&&n.para!==''?'ย่อหน้าที่ '+(+n.para+1)+' &middot; ':'')+esc(n.by||'')+(n.at?' '+esc(fmtTime(n.at)):'')+' &middot; <span class="'+(n.done?'done':'wait')+'">'+(n.done?'แก้แล้ว':'รอแก้ไข')+'</span></span></li>'});h+='</ul>';}
+    h+='</section>';
+  });
+  h+='<h2>หัวข้อที่ยังไม่ตรวจ ('+pendingItems.length+')</h2>';
+  if(!pendingItems.length)h+='<p>ตรวจครบทุกหัวข้อแล้ว</p>';
+  else{h+='<ul>';pendingItems.forEach(it=>{h+='<li>'+esc(it.title)+' <span class="meta">('+esc(it.group||'-')+')</span></li>'});h+='</ul>';}
+  h+='</body></html>';
+  tdDownload('thesisdesk-report-'+tdStamp()+'.html',h,'text/html;charset=utf-8');toast('ส่งออกรายงานผลตรวจ (HTML) แล้ว');
+}
+function importReviewJSON(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const data=JSON.parse(String(reader.result||''));
+      if(!data||data.tool!=='thesisdesk'||!(data.formatVersion||data.format)){toast('ไฟล์ไม่ถูกต้อง: ไม่ใช่ไฟล์ส่งออกจากโต๊ะตรวจสารนิพนธ์');return}
+      if(typeof data.reviews!=='object'||data.reviews===null||Array.isArray(data.reviews)){toast('ไฟล์ไม่ถูกต้อง: ไม่พบข้อมูลผลตรวจ (reviews)');return}
+      S.reviews=Object.assign({},S.reviews,data.reviews||{});
+      const noteKey=n=>[n&&n._id||'',n&&n.item||'',n&&n.para==null?'':n.para,n&&n.at||'',n&&n.by||'',n&&n.text||''].join('|');
+      const seenNotes=new Set(S.notes.map(noteKey));
+      (Array.isArray(data.notes)?data.notes:[]).forEach(n=>{const k=noteKey(n);if(!seenNotes.has(k)){seenNotes.add(k);S.notes.push(n)}});
+      const evKey=e=>(e&&e._id)||JSON.stringify(e);
+      const seenEv=new Set(S.events.map(evKey));
+      (Array.isArray(data.events)?data.events:[]).forEach(e=>{const k=evKey(e);if(!seenEv.has(k)){seenEv.add(k);S.events.push(e)}});
+      lsSave();renderAll();toast('นำเข้าผลตรวจแล้ว');
+    }catch(e){toast('ไฟล์ไม่ถูกต้อง: อ่านไฟล์ JSON ไม่สำเร็จ')}
+  };
+  reader.onerror=()=>toast('อ่านไฟล์ไม่สำเร็จ');
+  reader.readAsText(file);
+}
+const _bJ=$('#btnExportJson');if(_bJ)_bJ.onclick=exportReviewJSON;
+const _bH=$('#btnExportHtml');if(_bH)_bH.onclick=exportReviewHTML;
+const _bI=$('#btnImport'),_fI=$('#importFile');
+if(_bI&&_fI)_bI.onclick=()=>_fI.click();
+if(_fI)_fI.onchange=e=>{const f=e.target.files&&e.target.files[0];importReviewJSON(f);e.target.value=''};
+
 let role='อาจารย์';
 try{role=localStorage.getItem('thesisdesk.role')||'อาจารย์'}catch(e){}
 function setRole(r){role=r;try{localStorage.setItem('thesisdesk.role',r)}catch(e){}
